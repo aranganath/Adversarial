@@ -145,7 +145,7 @@ def one_vs_all_dataloader(data, labels, digit):
     dataset = torch.utils.data.TensorDataset(torch.Tensor(data), torch.Tensor(labels).type(torch.long))
     dataloader = torch.utils.data.DataLoader(dataset, batch_size=64, shuffle=False)
     
-    return dataloader, one_v_all_labels
+    return dataloader, labels
 
 def view_classify(img, ps, img_title=None):
     ''' Function for viewing an image and it's predicted classes.
