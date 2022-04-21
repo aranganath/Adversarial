@@ -2,11 +2,12 @@ import torch
 import torch.nn as nn
 
 class My_VGG(nn.Module):
-    def __init__(self, in_channels=3, num_classes=10):
+    def __init__(self, in_channels=3, in_size=28, num_classes=10):
         super().__init__()
         features_cfg = [64, "M", 128, "M", 256, 256, "M", 512, 512]
         classifier_cfg = [4096, "ReLU", "Dropout", 4096, "ReLU", "Dropout", num_classes]
         input_channels = in_channels
+        input_size = in_size
         
         layers = []
         for v in features_cfg:
@@ -17,14 +18,14 @@ class My_VGG(nn.Module):
                 layers.append(nn.ReLU(inplace=True))
             elif v == "M":
                 layers.append(nn.MaxPool2d(kernel_size=2, stride=2, padding=0, ceil_mode=False))
+                input_size = int(input_size / 2)
         self.features = nn.Sequential(*layers)
-                
-        self.avgpool = nn.AdaptiveAvgPool2d(output_size=(1, 1))
         
         layers = []
         for v in classifier_cfg:
             if isinstance(v, int):
-                layers.append(nn.Linear(input_channels, v, bias=True))
+                layers.append(nn.Linear(input_channels * input_size**2, v, bias=True))
+                input_size = 1
                 input_channels = v
             elif v == "ReLU":
                 layers.append(nn.ReLU(inplace=True))
@@ -37,7 +38,6 @@ class My_VGG(nn.Module):
         
     def forward(self, x):
         x = self.features(x)
-        x = self.avgpool(x)
         x = x.view(x.size(0), -1)
         x = self.classifier(x)
         return x
