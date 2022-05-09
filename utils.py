@@ -161,8 +161,8 @@ def eval_model(model, data, labels, high_conf_thres=None):
             high_conf_misclassification_count += 1
         all_count += 1
     
-    print("Number Of Samples Tested =", all_count)
-    print("\nModel Accuracy =", (correct_count/all_count))
+    #print("Number Of Samples Tested =", all_count)
+    print("Model Accuracy =", (correct_count/all_count))
     if high_conf_thres != None:
         print("\nNumber of misclassified samples with high model confidence = ", (high_conf_misclassification_count))
 
