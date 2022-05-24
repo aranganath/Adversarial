@@ -22,6 +22,7 @@ class My_VGG(nn.Module):
         self.features = nn.Sequential(*layers)
         
         layers = []
+        layers.append(nn.Flatten(start_dim=1, end_dim=-1))
         for v in classifier_cfg:
             if isinstance(v, int):
                 layers.append(nn.Linear(input_channels * input_size**2, v, bias=True))
@@ -38,7 +39,6 @@ class My_VGG(nn.Module):
         
     def forward(self, x):
         x = self.features(x)
-        x = x.view(x.size(0), -1)
         x = self.classifier(x)
         return x
     

@@ -48,7 +48,7 @@ def normalize_data(X_train, y_train, X_test, y_test):
 
 def train_model(model, x_train, x_test, y_train, y_test, epochs=15):
     device = "cuda" if torch.cuda.is_available() else "cpu"
-    transform = transforms.Compose([transforms.Normalize((0,), (1,)),])
+    #transform = transforms.Compose([transforms.Normalize((0,), (1,)),])
     
     trainset = torch.utils.data.TensorDataset(torch.Tensor(x_train), torch.Tensor(y_train).type(torch.long))
     valset = torch.utils.data.TensorDataset(torch.Tensor(x_test), torch.Tensor(y_test).type(torch.long))
@@ -56,26 +56,17 @@ def train_model(model, x_train, x_test, y_train, y_test, epochs=15):
     valloader = torch.utils.data.DataLoader(valset, batch_size=64, shuffle=True)
 
     criterion = nn.NLLLoss()
-    images, labels = next(iter(trainloader))
-    #images = images.view(images.shape[0], -1)
-    labels = labels
-
-    logps = model(images)
-    loss = criterion(logps, labels)
-
     optimizer = optim.Adam(model.parameters(), lr=0.001)
+    
     if device == "cuda":
         model = model.cuda()
-    time0 = time()
-    
     model.train()
+    
+    time0 = time()
     for e in range(epochs):
         running_loss = 0
         for images, labels in trainloader:
             images, labels = images.to(device), labels.to(device)
-
-            #images = images.view(images.shape[0], -1)
-            #labels = labels
 
             optimizer.zero_grad()
 
@@ -87,22 +78,19 @@ def train_model(model, x_train, x_test, y_train, y_test, epochs=15):
             optimizer.step()
 
             running_loss += loss.item()
-        else:
-            print("Epoch {} - Training loss: {}".format(e, running_loss/len(trainloader)))
+        print("Epoch {} - Training loss: {}".format(e, running_loss/len(trainloader)))
     print("\nTraining Time (in minutes) =",(time()-time0)/60)
 
     model.to("cpu")
     images, labels = next(iter(valloader))
 
-    #img = images[0].view(1, 784)
     img = images[0].unsqueeze(axis=0)
     with torch.no_grad():
         logps = model(img)
 
     ps = torch.exp(logps)
     probab = list(ps.numpy()[0])
-    print("Predicted Digit =", probab.index(max(probab)))
-    #view_classify(img.view(1, 28, 28), ps)
+    print("Predicted Class =", probab.index(max(probab)))
     view_classify(img.squeeze(), ps)
     
     model.eval()
@@ -112,25 +100,9 @@ def train_model(model, x_train, x_test, y_train, y_test, epochs=15):
     for x, y in valloader:
         all_count += y.shape[0]
         x, y = x.to(device), y.to(device)
-        logps = model(x)
-        ps = torch.exp(logps)
-        preds = ps.max(1)[1]
+        output = model(x)
+        preds = output.max(1)[1]
         correct_count += preds.eq(y).sum().item()
-#     for images,labels in valloader:
-#         images, labels = images.to(device), labels.to(device)
-#         for i in range(len(labels)):
-#             img = images[i].unsqueeze(axis=0)
-#             with torch.no_grad():
-#                 logps = model(img)
-
-
-#             ps = torch.exp(logps)
-#             probab = list(ps.cpu().numpy()[0])
-#             pred_label = probab.index(max(probab))
-#             true_label = labels.cpu().numpy()[i]
-#             if(true_label == pred_label):
-#                 correct_count += 1
-#             all_count += 1
     model.to("cpu")
 
     print("Number Of Images Tested =", all_count)
@@ -147,24 +119,43 @@ def eval_model(model, data, labels, high_conf_thres=None):
     """
     correct_count, all_count, high_conf_misclassification_count = 0, 0, 0
     
-    for i in range(len(data)):
-        img = torch.from_numpy(data[i]).unsqueeze(axis=0) # Create tensor with batch dimension
-        with torch.no_grad():
-            logps = model(img)
-
-        ps = torch.exp(logps)
-        probab = list(ps.numpy()[0])
-        pred_label = probab.index(max(probab))
-        if (pred_label == labels[i]):
-            correct_count += 1
-        elif ((high_conf_thres != None) and (ps.max().item() >= high_conf_thres)):
-            high_conf_misclassification_count += 1
-        all_count += 1
-    
-    #print("Number Of Samples Tested =", all_count)
-    print("Model Accuracy =", (correct_count/all_count))
     if high_conf_thres != None:
+        for i in range(len(data)):
+            img = torch.from_numpy(data[i]).unsqueeze(axis=0) # Create tensor with batch dimension
+            with torch.no_grad():
+                logps = model(img)
+
+            ps = torch.exp(logps)
+            probab = list(ps.numpy()[0])
+            pred_label = probab.index(max(probab))
+            if (pred_label == labels[i]):
+                correct_count += 1
+            elif ((high_conf_thres != None) and (ps.max().item() >= high_conf_thres)):
+                high_conf_misclassification_count += 1
+            all_count += 1
+
+        print("Number Of Samples Tested =", all_count)
+        print("Model Accuracy =", (correct_count/all_count))
         print("\nNumber of misclassified samples with high model confidence = ", (high_conf_misclassification_count))
+    else:
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        
+        testset = torch.utils.data.TensorDataset(torch.Tensor(data), torch.Tensor(labels).type(torch.long))
+        testloader = torch.utils.data.DataLoader(testset, batch_size=64, shuffle=True)
+        
+        model.eval()
+        if device == "cuda":
+            model = model.cuda()
+            
+        for x, y in testloader:
+            all_count += y.shape[0]
+            x, y = x.to(device), y.to(device)
+            logps = model(x)
+            output = model(x)
+            preds = output.max(1)[1]
+            correct_count += preds.eq(y).sum().item()
+        model.to("cpu")
+        return (correct_count/all_count)
 
 def get_network_outputs(model, dataloader):
     """ Given a model and dataloader, returns an ndarray of the model outputs for data in the dataloader.
@@ -189,13 +180,18 @@ def add_adversarial_noise(model, dataloader, eps=3e-2):
         generated by a white-box FGSM attack on the provided network.
     """
     adv_images = list()
-    model.to("cpu")
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    model.to(device)
+    
     for x, y in dataloader:
+        x, y = x.to(device), y.to(device)
         adv_images.append(fast_gradient_method(model, x, eps, np.inf).detach().cpu().numpy())
             
     adv_images = np.concatenate(adv_images)
+    if device == "cuda":
+        model.to("cpu")
     
-    return adv_images 
+    return adv_images
 
 def create_dataloader(data, labels=None):
     """ Returns PyTorch dataloader object created from passed in data
@@ -231,7 +227,7 @@ def view_classify(img, ps, img_title=None):
     if (img.shape[0] == 3):
         ax1.imshow(img.reshape(32,32,3))
     else:
-        ax1.imshow(img)
+        ax1.imshow(img.reshape(28,28))
     ax1.axis('off')
     if img_title is not None:
         ax1.set_title(img_title)
@@ -242,3 +238,4 @@ def view_classify(img, ps, img_title=None):
     ax2.set_title('Class Probability')
     ax2.set_xlim(0, 1.1)
     plt.tight_layout()
+    plt.show()

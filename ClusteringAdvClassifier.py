@@ -4,18 +4,19 @@ from sklearn.svm import SVC
 import utils
 
 class ClusterAdversarialClassifier():
-    def __init__(self, model, input_transform=None):
+    def __init__(self, model, input_transform=None, SVC_C=1):
         self.model = model
         self.input_transform = input_transform
+        self.SVC_C = SVC_C
         
     def fit(self, X, y):
         # Find RBF classification boundary in input space
         flat_X = X.reshape(X.shape[0], -1)
         if self.input_transform:
-            self.input_cluster = SVC(kernel='rbf', C=1, random_state=42, max_iter = 1e5, decision_function_shape='ovr').fit(
+            self.input_cluster = SVC(kernel='rbf', C=self.SVC_C, random_state=42, max_iter = 1e5, decision_function_shape='ovr').fit(
                                      self.input_transform.fit_transform(flat_X), y)
         else:
-            self.input_cluster = SVC(kernel='rbf', C=1, random_state=42, max_iter = 1e5, decision_function_shape='ovr').fit(
+            self.input_cluster = SVC(kernel='rbf', C=self.SVC_C, random_state=42, max_iter = 1e5, decision_function_shape='ovr').fit(
                                      flat_X, y)
         
         # Get model outputs
@@ -23,7 +24,7 @@ class ClusterAdversarialClassifier():
         outputs = utils.get_network_outputs(self.model, train_dataloader)
         
         # Find RBF classification boundary in output space
-        self.output_cluster = SVC(kernel='rbf', C=1, random_state=42, max_iter = 1e5, decision_function_shape='ovr').fit(
+        self.output_cluster = SVC(kernel='rbf', C=self.SVC_C, random_state=42, max_iter = 1e5, decision_function_shape='ovr').fit(
                                   outputs, y)
         
     def predict(self, X):
@@ -36,7 +37,10 @@ class ClusterAdversarialClassifier():
         # Get input and output cluster predictions - if these disagree, we will consider the sample suspicious
         flat_X = X.reshape(X.shape[0], -1)
         if self.input_transform:
-            input_cluster_preds = (self.input_cluster).predict(self.input_transform.transform(flat_X))
+            try:
+                input_cluster_preds = (self.input_cluster).predict(self.input_transform.transform(flat_X))
+            except AttributeError:
+                input_cluster_preds = (self.input_cluster).predict(self.input_transform.fit_transform(flat_X))
         else:
             input_cluster_preds = (self.input_cluster).predict(flat_X)
         output_cluster_preds = (self.output_cluster).predict(outputs)
