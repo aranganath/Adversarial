@@ -44,7 +44,7 @@ class LayerwiseClustering():
                 x = x.reshape(x.shape[0], -1)
             if (x.shape[1] > 500 and self.dim_reducer != None): # Reduce dimensionality of data
                 x = self.dim_reducer.fit_transform(x)
-            tsne_output = TSNE(n_components=2, perplexity = 50, n_iter = 2000, learning_rate = 200.0, init='random').fit_transform(x)
+            tsne_output = TSNE(n_components=2, perplexity = 50, n_iter = 50000, learning_rate = 200.0, init='random').fit_transform(x)
 
             # For each unique class of the passed-in data, plot the TSNE embedding of that data
             classes = np.unique(labels)

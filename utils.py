@@ -10,6 +10,8 @@ from time import time
 
 from tensorflow.keras.datasets import mnist, fashion_mnist, cifar10
 
+from model import My_VGG
+
 def load_mnist():
     (x_train, y_train), (x_test, y_test) = mnist.load_data()
     x_train = np.expand_dims(x_train, axis=1)
@@ -107,6 +109,21 @@ def train_model(model, x_train, x_test, y_train, y_test, epochs=15):
 
     print("Number Of Images Tested =", all_count)
     print("\nModel Accuracy =", (correct_count/all_count))
+    
+    return model
+
+def load_VGG(path, load_checkpoint=False):
+    checkpoint = torch.load(path)
+    
+    channels, size, classes = checkpoint['in_channels'], checkpoint['in_size'], checkpoint['num_classes']
+    model = My_VGG(in_channels=channels, in_size=size, num_classes=classes)
+    model.load_state_dict(checkpoint['model_state_dict'])
+    
+    if load_checkpoint:
+        optimizer = optim.Adam(model.parameters(), lr=0.001)
+        optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+        epoch = checkpoint['epoch']
+        return model, optimizer, epoch
     
     return model
 
