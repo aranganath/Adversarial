@@ -8,7 +8,9 @@ import matplotlib.pyplot as plt
 import utils
 
 class LayerwiseClustering():
-    """
+    """ Creates an SVM with a RBF boundary around each class at each layer of the provided model.
+        Can also be used to return the output of each linear or convolutional layer 'block' in the
+        provided model.
     """
     def __init__(self, model, dim_reducer=None, SVC_C=1):
         super().__init__()
@@ -17,6 +19,10 @@ class LayerwiseClustering():
         self.dim_reducer = dim_reducer
         
     def plotSampleInClusters(self, data, labels, sample):
+        """ Plots a TSNE visualization of the output of each layer 'block' in the provided neural net.
+            Also plots a provided sample in each layer's visualization, which is displayed distinctly 
+            from each class of data provided.
+        """
         # Get model prediction probabilities for passed-in sample
         img = torch.Tensor(sample)
         img = img.unsqueeze(axis=0)
@@ -27,7 +33,7 @@ class LayerwiseClustering():
         probab = list(ps.numpy()[0])
         print("Predicted Class =", probab.index(max(probab)))
         # Use probabilities to view-classify sample
-        utils.view_classify(img.squeeze(), ps)
+        utils.view_classify(img.squeeze(), ps, img_title = "Adversarial Sample")
         
         # Add passed-in sample to the dataset
         sample_idx = data.shape[0]
@@ -67,27 +73,37 @@ class LayerwiseClustering():
 
     def fit(self, X, y):
         layerwise_outputs = self.getLayerwiseOutputs(X)
-                    
+        
+        # Creates a cluster for each layer returned by getLayerwiseOutputs
         self.feature_clusters = [SVC(kernel='rbf', C=self.SVC_C, random_state=42, max_iter = 1e5, decision_function_shape='ovr').fit(
                                      x, y) for x in layerwise_outputs]
         
     def predict(self, X):
         layerwise_outputs = self.getLayerwiseOutputs(X)
-                    
+        
+        # Predicts each sample at each layer returned by getLayerwiseOutputs, using the SVM clusters
         return [self.feature_clusters[i].predict(layerwise_outputs[i]) for i in range(len(self.feature_clusters))]
     
     # Modify to put model and tensors on GPU if it's available, then take model off GPU at the end of the method
     def getLayerwiseOutputs(self, X):
+        """ Takes a dataset X and runs it through the provided model, saving the output at any linear
+            or convolutional layer as it goes.
+        """
         X_tensor = torch.utils.data.TensorDataset(torch.Tensor(X))
         X_loader = torch.utils.data.DataLoader(X_tensor, batch_size=128, shuffle=False)
         
+        # Maintains a list of each layer's output on each batch of data
+        # Small batches of data outputs at each layer are added at a time rather than the output of all of 
+        #   the data in a single layer at a time
         layerwise_outputs = []
         
         for x in X_loader:
-            x = x[0]
+            x = x[0] # X_loader is expected to return data and labels, but we only want the data
             batch_outputs = self.forward(x)
+            # If this is the first batch, just assign it to layerwise outputs
             if len(layerwise_outputs) == 0:
                 layerwise_outputs = batch_outputs
+            # Otherwise, add each layer in the returned batch to the appropriate layer in layerwise outputs
             else:
                 for i in range(len(layerwise_outputs)):
                     layerwise_outputs[i] = np.append(layerwise_outputs[i], batch_outputs[i], axis=0)

@@ -12,6 +12,10 @@ from tensorflow.keras.datasets import mnist, fashion_mnist, cifar10
 
 from model import My_VGG
 
+""" Each 'load' function loads the indicated dataset, converts it to float, and 
+    converts the data range to [0, 1]. If necessary, the data is also reshaped
+    to a shape that can be used by a PyTorch model.
+"""
 def load_mnist():
     (x_train, y_train), (x_test, y_test) = mnist.load_data()
     x_train = np.expand_dims(x_train, axis=1)
@@ -49,6 +53,10 @@ def normalize_data(X_train, y_train, X_test, y_test):
     return X_train, y_train, X_test, y_test
 
 def train_model(model, x_train, x_test, y_train, y_test, epochs=15):
+    """ Trains a model on the training data provided, and then evaluates it on the test data.
+        Also calls view_classify on a sample image from the test set, which displays the image 
+        itself and the model's output for that image.
+    """
     device = "cuda" if torch.cuda.is_available() else "cpu"
     #transform = transforms.Compose([transforms.Normalize((0,), (1,)),])
     
@@ -113,6 +121,11 @@ def train_model(model, x_train, x_test, y_train, y_test, epochs=15):
     return model
 
 def load_VGG(path, load_checkpoint=False):
+    """ Used to load a pre-trained model. Right now it's set up to specifically load an instance of
+        the My_VGG model. Setting the load_checkpoint parameter to True will make the function return
+        the model, the state of the optimizer at the point the model stopped training, and the epoch
+        it stopped training at. Leaving load_checkpoint as False will only return the loaded model.
+    """
     checkpoint = torch.load(path)
     
     channels, size, classes = checkpoint['in_channels'], checkpoint['in_size'], checkpoint['num_classes']
