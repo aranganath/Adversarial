@@ -14,10 +14,11 @@ class ClusterAdversarialClassifier():
     def fit(self, X, y):
         # Find RBF classification boundary in input space
         if self.dct:
-            X_cluster = fftpack.dct(X - 0.5) # Applies DCT prior to clustering
+            X_cluster = X.reshape(X.shape[0], -1) - 0.5
+            X_cluster = np.array([ fftpack.dct(x) for x in X_cluster]) # Applies DCT prior to clustering
         else: 
             X_cluster = X
-        X_cluster = X_cluster.reshape(X.shape[0], -1)
+            X_cluster = X_cluster.reshape(X.shape[0], -1)
         if self.input_transform:
             self.input_cluster = SVC(kernel='rbf', C=self.SVC_C, random_state=42, max_iter = 1e5, decision_function_shape='ovr').fit(
                                      self.input_transform.fit_transform(X_cluster), y)
@@ -42,10 +43,11 @@ class ClusterAdversarialClassifier():
         
         # Get input and output cluster predictions - if these disagree, we will consider the sample suspicious
         if self.dct:
-            X_cluster = fftpack.dct(X - 0.5) # Applies DCT prior to clustering
+            X_cluster = X.reshape(X.shape[0], -1) - 0.5
+            X_cluster = np.array([ fftpack.dct(x) for x in X_cluster]) # Applies DCT prior to clustering
         else: 
             X_cluster = X
-        X_cluster = X_cluster.reshape(X.shape[0], -1)
+            X_cluster = X_cluster.reshape(X.shape[0], -1)
         if self.input_transform:
             try:
                 input_cluster_preds = (self.input_cluster).predict(self.input_transform.transform(X_cluster))
