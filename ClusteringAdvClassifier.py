@@ -5,26 +5,20 @@ from scipy import fftpack
 import utils
 
 class ClusterAdversarialClassifier():
-    def __init__(self, model, input_transform=None, SVC_C=1, dct=False):
+    def __init__(self, model, input_transform=None, SVC_C=1):
         self.model = model
         self.input_transform = input_transform
         self.SVC_C = SVC_C
-        self.dct = dct
         
     def fit(self, X, y):
         # Find RBF classification boundary in input space
-        if self.dct:
-            X_cluster = X.reshape(X.shape[0], -1) - 0.5
-            X_cluster = np.array([ fftpack.dct(x) for x in X_cluster]) # Applies DCT prior to clustering
-        else: 
-            X_cluster = X
-            X_cluster = X_cluster.reshape(X.shape[0], -1)
+        X_flat = X.reshape(X.shape[0], -1)
         if self.input_transform:
             self.input_cluster = SVC(kernel='rbf', C=self.SVC_C, random_state=42, max_iter = 1e5, decision_function_shape='ovr').fit(
-                                     self.input_transform.fit_transform(X_cluster), y)
+                                     self.input_transform.fit_transform(X_flat), y)
         else:
             self.input_cluster = SVC(kernel='rbf', C=self.SVC_C, random_state=42, max_iter = 1e5, decision_function_shape='ovr').fit(
-                                     X_cluster, y)
+                                     X_flat, y)
 
         # Get model outputs
         train_dataloader = utils.create_dataloader(X, y)
@@ -42,19 +36,14 @@ class ClusterAdversarialClassifier():
         preds = np.argmax(np.exp(outputs), axis=1)
         
         # Get input and output cluster predictions - if these disagree, we will consider the sample suspicious
-        if self.dct:
-            X_cluster = X.reshape(X.shape[0], -1) - 0.5
-            X_cluster = np.array([ fftpack.dct(x) for x in X_cluster]) # Applies DCT prior to clustering
-        else: 
-            X_cluster = X
-            X_cluster = X_cluster.reshape(X.shape[0], -1)
+        X_flat = X.reshape(X.shape[0], -1)
         if self.input_transform:
             try:
-                input_cluster_preds = (self.input_cluster).predict(self.input_transform.transform(X_cluster))
+                input_cluster_preds = (self.input_cluster).predict(self.input_transform.transform(X_flat))
             except AttributeError:
-                input_cluster_preds = (self.input_cluster).predict(self.input_transform.fit_transform(X_cluster))
+                input_cluster_preds = (self.input_cluster).predict(self.input_transform.fit_transform(X_flat))
         else:
-            input_cluster_preds = (self.input_cluster).predict(X_cluster)
+            input_cluster_preds = (self.input_cluster).predict(X_flat)
         output_cluster_preds = (self.output_cluster).predict(outputs)
         flagged_sample_indices = (input_cluster_preds != output_cluster_preds)
         
@@ -63,11 +52,19 @@ class ClusterAdversarialClassifier():
         # For samples flagged as likely to be adversarial by clusters, predict using instead the input cluster classification
         preds[flagged_sample_indices] = input_cluster_preds[flagged_sample_indices]
         
+        self.flagged_sample_indices = flagged_sample_indices
+        
         return preds
 
     def score(self, X, y):
         # Get predictions
         preds = self.predict(X)
+        
+        cluster_sample_indices = self.flagged_sample_indices
+        cnn_sample_indices = np.logical_not(self.flagged_sample_indices)
+        
+        self.cluster_accuracy = (preds[cluster_sample_indices] == y[cluster_sample_indices]).sum().item() / len(y[cluster_sample_indices])
+        self.cnn_accuracy = (preds[cnn_sample_indices] == y[cnn_sample_indices]).sum().item() / len(y[cnn_sample_indices])
         
         # Return proportion that are correct
         return (preds == y).sum().item() / y.shape[0]
