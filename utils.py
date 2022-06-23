@@ -1,14 +1,17 @@
 import torchvision
-from torchvision import transforms
+from torchvision import datasets, transforms
+from torch.utils.data import DataLoader
 import numpy as np
 import torch
 from torch import nn, optim
 import matplotlib.pyplot as plt
+from matplotlib.text import OffsetFrom
+from matplotlib.patches import FancyArrowPatch
 
 from cleverhans.torch.attacks.fast_gradient_method import fast_gradient_method
 from time import time
 
-from tensorflow.keras.datasets import mnist, fashion_mnist, cifar10
+#from tensorflow.keras.datasets import mnist, fashion_mnist, cifar10
 
 from model import My_VGG
 
@@ -17,40 +20,46 @@ from model import My_VGG
     to a shape that can be used by a PyTorch model.
 """
 def load_mnist():
-    (x_train, y_train), (x_test, y_test) = mnist.load_data()
-    x_train = np.expand_dims(x_train, axis=1)
-    x_test = np.expand_dims(x_test, axis=1)
+    transform = transforms.Compose([transforms.ToTensor()])
     
-    return normalize_data(x_train, y_train, x_test, y_test)
+    train_dataset = torchvision.datasets.MNIST("data", download=True, train=True, transform=transform)
+    test_dataset = torchvision.datasets.MNIST("data", download=True, train=False, transform=transform)
+    train_loader = DataLoader(train_dataset, batch_size=len(train_dataset))
+    test_loader = DataLoader(test_dataset, batch_size=len(test_dataset))
+    
+    (train_data, train_labels), (test_data, test_labels) = next(iter(train_loader)), next(iter(test_loader))
+    x_train, y_train = train_data.numpy(), train_labels.numpy()
+    x_test, y_test = test_data.numpy(), test_labels.numpy()
+    
+    return x_train, y_train, x_test, y_test
     
 def load_fashion_mnist():
-    (x_train, y_train), (x_test, y_test) = fashion_mnist.load_data()
-    x_train = np.expand_dims(x_train, axis=1)
-    x_test = np.expand_dims(x_test, axis=1)
+    transform = transforms.Compose([transforms.ToTensor()])
     
-    return normalize_data(x_train, y_train, x_test, y_test)
+    train_dataset = torchvision.datasets.FasionMNIST("data", download=True, train=True, transform=transform)
+    test_dataset = torchvision.datasets.FasionMNIST("data", download=True, train=False, transform=transform)
+    train_loader = DataLoader(train_dataset, batch_size=len(train_dataset))
+    test_loader = DataLoader(test_dataset, batch_size=len(test_dataset))
+    
+    (train_data, train_labels), (test_data, test_labels) = next(iter(train_loader)), next(iter(test_loader))
+    x_train, y_train = train_data.numpy(), train_labels.numpy()
+    x_test, y_test = test_data.numpy(), test_labels.numpy()
+    
+    return x_train, y_train, x_test, y_test
 
 def load_cifar10():
-    (x_train, y_train), (x_test, y_test) = cifar10.load_data()
-    x_train = x_train.reshape((-1,3,32,32))
-    x_test = x_test.reshape((-1,3,32,32))
-    y_train = y_train.reshape(-1)
-    y_test = y_test.reshape(-1)
+    transform = transforms.Compose([transforms.ToTensor()])
     
-    return normalize_data(x_train, y_train, x_test, y_test)
-
-def normalize_data(X_train, y_train, X_test, y_test):
-    # Conversion to float
-    X_train = X_train.astype('float32') 
-    X_test = X_test.astype('float32')
-    # Normalization
-    X_train = X_train/255.0
-    X_test = X_test/255.0
-    # Flatten
-    #X_train = x_train.reshape(len(x_train),-1)
-    #X_test = x_test.reshape(len(x_test),-1)
+    train_dataset = torchvision.datasets.CIFAR10("data", download=True, train=True, transform=transform)
+    test_dataset = torchvision.datasets.CIFAR10("data", download=True, train=False, transform=transform)
+    train_loader = DataLoader(train_dataset, batch_size=len(train_dataset))
+    test_loader = DataLoader(test_dataset, batch_size=len(test_dataset))
     
-    return X_train, y_train, X_test, y_test
+    (train_data, train_labels), (test_data, test_labels) = next(iter(train_loader)), next(iter(test_loader))
+    x_train, y_train = train_data.numpy(), train_labels.numpy()
+    x_test, y_test = test_data.numpy(), test_labels.numpy()
+    
+    return x_train, y_train, x_test, y_test
 
 def train_model(model, x_train, x_test, y_train, y_test, epochs=15):
     """ Trains a model on the training data provided, and then evaluates it on the test data.
@@ -255,7 +264,7 @@ def view_classify(img, ps, img_title=None):
 
     fig, (ax1, ax2) = plt.subplots(figsize=(6,9), ncols=2)
     if (img.shape[0] == 3):
-        ax1.imshow(img.reshape(32,32,3))
+        ax1.imshow(np.transpose(img, (1,2,0)))
     else:
         ax1.imshow(img.reshape(28,28))
     ax1.axis('off')
@@ -269,3 +278,80 @@ def view_classify(img, ps, img_title=None):
     ax2.set_xlim(0, 1.1)
     plt.tight_layout()
     plt.show()
+
+def visualize_full_binary_tree(max_depth, box_labels=None, box_values=None, arrow_text=None, ax=None, text_size='small', 
+                               offset=0, depth=0, i=1):
+    if depth == max_depth: # Base case
+        return
+    
+    # If no axes are provided, create them
+    if ax==None:
+        _, ax = plt.subplots()
+        ax.set_axis_off()
+    
+    # Constants defining the size of gaps between boxes in the visualization
+    vertical_gap = .1
+    horizontal_gap = .025
+    
+    # Define sizes of boxes (representing nodes in tree) relative to remaining space at current depth of tree
+    box_height = (.99 - vertical_gap*max_depth) / max_depth
+    remaining_height = 1 - (box_height + vertical_gap) * (depth+1)
+    
+    box_width = 1 / 2**(max_depth-1) - horizontal_gap
+    curr_width = 1 / 2**depth
+    
+    # Draw left subtree
+    visualize_full_binary_tree(max_depth, box_labels, box_values, arrow_text, ax, text_size, offset, depth + 1, i*2)
+    
+    # Draw right subtree
+    visualize_full_binary_tree(max_depth, box_labels, box_values, arrow_text, ax, text_size, offset+curr_width/2, depth + 1, i*2+1)
+    
+    # Draw arrows between node at current level and left and right children
+    if depth + 1 != max_depth:
+        origin = (curr_width/2 + offset, remaining_height)
+        destination = (curr_width/4 + offset, remaining_height - vertical_gap)
+        # Used to fill text next to arrows
+        left_arrow_text = ''
+        right_arrow_text = ''
+        
+        if arrow_text != None:
+            # Reads arrow_text values in top-down, left-right order
+            left_arrow_text = str(arrow_text[(i*2) - 2])
+            right_arrow_text = str(arrow_text[(i*2 + 1) - 2])
+        
+        # Draw left arrow
+        left_arrow = FancyArrowPatch(origin, destination, mutation_scale=8, arrowstyle="->")
+        ax.add_patch(left_arrow)
+        ax.annotate(left_arrow_text, # Draw text for left arrow
+                    xy=destination,
+                    xytext=(0, 0), textcoords=OffsetFrom(left_arrow, (0.5, 0.5), "pixels"),
+                    ha="right", fontsize=text_size)
+        
+        # Draw right arrow
+        right_arrow = FancyArrowPatch(origin, (destination[0]+curr_width/2, destination[1]), mutation_scale=8, arrowstyle="->")
+        ax.add_patch(right_arrow)
+        ax.annotate(right_arrow_text, # Draw text for right arrow
+                    xy=destination,
+                    xytext=(0, 0), textcoords=OffsetFrom(right_arrow, (0.5, 0.5), "pixels"),
+                    ha="left", fontsize=text_size)
+        
+    # Draw node at current level
+    x = (curr_width - box_width) / 2 + offset
+    y = remaining_height
+    node = plt.Rectangle((x, y), box_width, box_height, fill=False)
+    ax.add_patch(node)
+    
+    # In-box annotation
+    if box_labels != None:
+        ax.text(curr_width/2 + offset, remaining_height+box_height-.01, str(box_labels[i-1]),
+                horizontalalignment='center',
+                verticalalignment='top',
+                transform=ax.transAxes, fontsize=text_size, wrap=True)
+    
+    if box_values != None:
+        ax.text(x + box_width / 2, y + box_height / 2, str(box_values[i-1]),
+                horizontalalignment='center',
+                verticalalignment='center',
+                transform=ax.transAxes, size=text_size, wrap=True)
+    
+    return ax
