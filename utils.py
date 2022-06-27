@@ -36,8 +36,8 @@ def load_mnist():
 def load_fashion_mnist():
     transform = transforms.Compose([transforms.ToTensor()])
     
-    train_dataset = torchvision.datasets.FasionMNIST("data", download=True, train=True, transform=transform)
-    test_dataset = torchvision.datasets.FasionMNIST("data", download=True, train=False, transform=transform)
+    train_dataset = torchvision.datasets.FashionMNIST("data", download=True, train=True, transform=transform)
+    test_dataset = torchvision.datasets.FashionMNIST("data", download=True, train=False, transform=transform)
     train_loader = DataLoader(train_dataset, batch_size=len(train_dataset))
     test_loader = DataLoader(test_dataset, batch_size=len(test_dataset))
     
@@ -60,6 +60,13 @@ def load_cifar10():
     x_test, y_test = test_data.numpy(), test_labels.numpy()
     
     return x_train, y_train, x_test, y_test
+
+def RGB_to_gray(image):
+    if image.ndim == 4:
+        gray_images = 0.2989 * image[:,0,:,:] + 0.5870 * image[:,0,:,:] + 0.1140 * image[:,0,:,:]
+        return np.expand_dims(gray_images, 1)
+    else:
+        return 0.2989 * image[0,:,:] + 0.5870 * image[0,:,:] + 0.1140 * image[0,:,:]
 
 def train_model(model, x_train, x_test, y_train, y_test, epochs=15):
     """ Trains a model on the training data provided, and then evaluates it on the test data.

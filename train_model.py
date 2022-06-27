@@ -2,6 +2,7 @@ import numpy as np
 import torch
 from torch import nn, optim
 from time import time
+import argparse
 
 from model import My_VGG as Model
 import utils
@@ -54,23 +55,33 @@ def train_model(model, optimizer, x_train, x_test, y_train, y_test, epochs=15):
     
     return model, optimizer
 
-def main():
+def main(_):
     # Load data
-    X_train, y_train, X_test, y_test = utils.load_mnist()
-    channels, size, classes = 1, 28, 10
+    if args.dataset == 'MNIST':
+        X_train, y_train, X_test, y_test = utils.load_mnist()
+        channels, size, classes = 1, 28, 10
+    elif args.dataset == 'FMNIST':
+        X_train, y_train, X_test, y_test = utils.load_fashion_mnist()
+        channels, size, classes = 1, 28, 10
+    elif args.dataset == 'GRAY_CIFAR10':
+        X_train, y_train, X_test, y_test = utils.load_cifar10()
+        X_train, X_test = utils.RGB_to_gray(X_train), utils.RGB_to_gray(X_test)
+        channels, size, classes = 1, 32, 10
+    else:
+        print("Invalid dataset. Valid datasets are 'MNIST', 'FMNIST', and 'GRAY_CIFAR10'")
+        return
     
     # Create model and optimizer
     model = Model(in_channels=channels, in_size=size, num_classes=classes)
     optimizer = optim.Adam(model.parameters(), lr=0.001)
     
     # Train base model
-    epochs = 15
-    model, optimizer = train_model(model, optimizer, X_train, X_test, y_train, y_test, epochs=epochs)
+    model, optimizer = train_model(model, optimizer, X_train, X_test, y_train, y_test, epochs=args.initial_epochs)
     
     # Save trained model
-    PATH = 'trained_models/initial_model.pt'
+    PATH = 'trained_models/' + args.dataset + '_model.pt'
     
-    torch.save({'epoch': epochs,
+    torch.save({'epoch': args.initial_epochs,
                 'model_state_dict': model.state_dict(),
                 'optimizer_state_dict': optimizer.state_dict(),
                 'in_channels': channels,
@@ -87,12 +98,12 @@ def main():
     adv_test_data = utils.add_adversarial_noise(model, test_dataloader, eps=adversarial_training_eps)
     
     # Continue training model with adversarial samples
-    model, optimizer = train_model(model, optimizer, adv_train_data, adv_test_data, y_train, y_test, epochs=5)
+    model, optimizer = train_model(model, optimizer, adv_train_data, adv_test_data, y_train, y_test, epochs=args.adversarial_epochs)
     
     # Save adversarially trained model (separately from initial model)
-    PATH = 'trained_models/baseline_model.pt'
+    PATH = 'trained_models/adv_trained_' + args.dataset + '_model.pt'
     
-    torch.save({'epoch': epochs,
+    torch.save({'epoch': args.initial_epochs + args.adversarial_epochs,
                 'model_state_dict': model.state_dict(),
                 'optimizer_state_dict': optimizer.state_dict(),
                 'in_channels': channels,
@@ -101,5 +112,13 @@ def main():
                 }, PATH)
     
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(allow_abbrev=False)
+    parser.add_argument("--dataset", type=str, default="MNIST",
+                        help="Dataset to train model on. Options are: 'MNIST', 'FMNIST', and 'GRAY_CIFAR10'")
+    parser.add_argument("--initial_epochs", type=int, default=15,
+                        help="Number of epochs to train initial model for.")
+    parser.add_argument("--adversarial_epochs", type=int, default=5,
+                        help="Number of epochs to continue training initial model with adversarial samples for.")
     
-    main()
+    args = parser.parse_args()
+    main(args)
