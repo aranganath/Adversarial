@@ -18,26 +18,31 @@ class LayerwiseClustering():
         self.SVC_C = SVC_C
         self.dim_reducer = dim_reducer
         
-    def plotSampleInClusters(self, data, labels, sample):
+    def plotClusters(self, data, labels, sample=None, rbf=False, only_in_and_out_layers=False):
         """ Plots a TSNE visualization of the output of each layer 'block' in the provided neural net.
             Also plots a provided sample in each layer's visualization, which is displayed distinctly 
             from each class of data provided.
         """
-        # Get model prediction probabilities for passed-in sample
-        img = torch.Tensor(sample)
-        img = img.unsqueeze(axis=0)
-        with torch.no_grad():
-            logps = self.model(img)
+#         ###########################################
+#         one_v_all_labels = np.zeros(labels.shape, dtype=np.uint8)
+#         one_v_all_labels[np.where(labels == 0)[0]] = 1
+#         ###########################################
+        if sample != None:
+            # Get model prediction probabilities for passed-in sample
+            img = torch.Tensor(sample)
+            img = img.unsqueeze(axis=0)
+            with torch.no_grad():
+                logps = self.model(img)
 
-        ps = torch.exp(logps)
-        probab = list(ps.numpy()[0])
-        print("Predicted Class =", probab.index(max(probab)))
-        # Use probabilities to view-classify sample
-        utils.view_classify(img.squeeze(), ps, img_title = "Adversarial Sample")
+            ps = torch.exp(logps)
+            probab = list(ps.numpy()[0])
+            print("Predicted Class =", probab.index(max(probab)))
+            # Use probabilities to view-classify sample
+            utils.view_classify(img.squeeze(), ps, img_title = "Adversarial Sample")
         
-        # Add passed-in sample to the dataset
-        sample_idx = data.shape[0]
-        data = np.append(data, np.expand_dims(sample, axis=0), axis=0)
+            # Add passed-in sample to the dataset
+            sample_idx = data.shape[0]
+            data = np.append(data, np.expand_dims(sample, axis=0), axis=0)
         
         # Get layerwise model outputs on all passed-in data
         layerwise_outputs = self.getLayerwiseOutputs(data)
@@ -45,31 +50,82 @@ class LayerwiseClustering():
         # For each layer whose output was saved, plot a TSNE embedding of the outputs with data separated by class and the passed-in
         # sample as a distinct point
         for i, outputs in enumerate(layerwise_outputs):
-            x = outputs
-            if (x.ndim > 2): # Flatten data
-                x = x.reshape(x.shape[0], -1)
-            if (x.shape[1] > 500 and self.dim_reducer != None): # Reduce dimensionality of data
-                x = self.dim_reducer.fit_transform(x)
-            tsne_output = TSNE(n_components=2, perplexity = 50, n_iter = 50000, learning_rate = 200.0, init='random').fit_transform(x)
+            if only_in_and_out_layers and (i == 0 or i == len(layerwise_outputs) - 1):
+                x = outputs
+                if (x.shape[1] > 500 and self.dim_reducer != None): # Reduce dimensionality of data
+                    x = self.dim_reducer.fit_transform(x)
+                x = x.reshape(x.shape[0], -1) # Flatten data
+                tsne_output = TSNE(n_components=2, perplexity = 50, n_iter = 50000, learning_rate = 200.0, init='random').fit_transform(x)
 
-            # For each unique class of the passed-in data, plot the TSNE embedding of that data
-            classes = np.unique(labels)
-            plt.figure(figsize=(16,10))
-            for val in classes:
-                class_indices = np.where(labels == val)
-                plt.scatter(tsne_output[class_indices,0], tsne_output[class_indices,1], label=str(val))
-            # Plot the sample on the same graph
-            plt.scatter(tsne_output[sample_idx,0], tsne_output[sample_idx,1], label="Sample", c="#000000")
-            
-            # Label plot appropriately
-            if (i == 0):
-                plt.title("Inputs")
-            elif(i == (len(layerwise_outputs) - 1)):
-                plt.title("Outputs")
-            else:
-                plt.title("Output layer %d" % i)
-            plt.legend()
-            plt.show()
+                # For each unique class of the passed-in data, plot the TSNE embedding of that data
+                classes = np.unique(labels)
+                #colors=['red', 'orange', 'yellow', 'green', 'blue', 'indigo', 'purple', 'black', 'gray', 'lightcoral']
+                plt.figure(figsize=(16,10))
+                for j, val in enumerate(classes):
+                    class_indices = np.where(labels == val)
+                    plt.scatter(tsne_output[class_indices,0], tsne_output[class_indices,1], label=str(val), 
+                                #c=colors[j]
+                               )
+# #########################################################################
+#                 # For each unique class of the passed-in data, plot the TSNE embedding of that data
+#                 plt.figure(figsize=(16,10))
+#                 for j in range(2):
+#                     class_indices = np.where(one_v_all_labels == j)
+#                     label = '0s' if j == 1 else 'Non 0s'
+#                     plt.scatter(tsne_output[class_indices,0], tsne_output[class_indices,1], label=str(label))
+# #########################################################################
+                if sample != None:
+                    # Plot the sample on the same graph
+                    plt.scatter(tsne_output[sample_idx,0], tsne_output[sample_idx,1], label="Sample", c="#000000")
+
+                if rbf:
+                    ###############################################
+                    clf = SVC(kernel='rbf', C=1, random_state=42, max_iter = 1e5).fit(tsne_output, labels)
+                    
+                    ax = plt.gca()
+                    xlim = ax.get_xlim()
+                    ylim = ax.get_ylim()
+                    xx, yy = np.meshgrid(
+                        np.linspace(xlim[0], xlim[1], 50), np.linspace(ylim[0], ylim[1], 50)
+                    )
+
+                    Z = clf.decision_function(np.c_[xx.ravel(), yy.ravel()])
+                    Z = Z.reshape(xx.shape)
+                    plt.contour(
+                        xx,
+                        yy,
+                        Z,
+                        colors="k",
+                        levels=[-1, 0, 1],
+                        alpha=0.5,
+                        linestyles=["--", "-", "--"],
+                    )
+                    #########################################################
+#                     clf = SVC(kernel='rbf', C=1, random_state=42, max_iter = 1e5).fit(tsne_output, labels)
+
+#                     # Plotting RBF SVM
+#                     ax = plt.gca()
+#                     xlim = ax.get_xlim()
+#                     ylim = ax.get_ylim()
+#                     xx, yy = np.meshgrid(
+#                         np.linspace(xlim[0], xlim[1], 50), np.linspace(ylim[0], ylim[1], 50)
+#                     )
+
+#                     Z = clf.predict(np.c_[xx.ravel(), yy.ravel()])
+#                     Z = Z.reshape(xx.shape)
+#                     plt.contour(xx, yy, Z, 
+#                                 colors=['red', 'orange', 'yellow', 'green', 'blue', 'indigo', 'purple', 'black', 'gray', 'lightcoral'], 
+#                                 levels=[j + 0.5 for j in range(0,10)], alpha=0.5)
+##############################################################################
+                # Label plot appropriately
+                if (i == 0):
+                    plt.title("Inputs")
+                elif(i == (len(layerwise_outputs) - 1)):
+                    plt.title("Outputs")
+                else:
+                    plt.title("Output layer %d" % i)
+                plt.legend()
+                plt.show()
 
     def fit(self, X, y):
         layerwise_outputs = self.getLayerwiseOutputs(X)

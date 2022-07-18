@@ -133,3 +133,6 @@ trained_models/
 
 # Datasets
 data/
+
+# Results Folder
+results/

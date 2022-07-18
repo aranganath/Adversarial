@@ -9,6 +9,7 @@ from matplotlib.text import OffsetFrom
 from matplotlib.patches import FancyArrowPatch
 
 from cleverhans.torch.attacks.fast_gradient_method import fast_gradient_method
+from cleverhans.torch.attacks.projected_gradient_descent import projected_gradient_descent
 from time import time
 
 #from tensorflow.keras.datasets import mnist, fashion_mnist, cifar10
@@ -19,54 +20,71 @@ from model import My_VGG
     converts the data range to [0, 1]. If necessary, the data is also reshaped
     to a shape that can be used by a PyTorch model.
 """
-def load_mnist():
-    transform = transforms.Compose([transforms.ToTensor()])
+def load_mnist(normalize=False):
+    # Set up transforms, must be converted to tensor, normalize if specified
+    transform_list = [transforms.ToTensor()]
+    if normalize:
+        transform_list.append(torchvision.transforms.Normalize(mean=0.13066062, std=0.30810776))
+    transform = transforms.Compose(transform_list)
     
+    # Load dataset and apply transforms
     train_dataset = torchvision.datasets.MNIST("data", download=True, train=True, transform=transform)
     test_dataset = torchvision.datasets.MNIST("data", download=True, train=False, transform=transform)
     train_loader = DataLoader(train_dataset, batch_size=len(train_dataset))
     test_loader = DataLoader(test_dataset, batch_size=len(test_dataset))
     
+    # Convert dataset to numpy array
     (train_data, train_labels), (test_data, test_labels) = next(iter(train_loader)), next(iter(test_loader))
     x_train, y_train = train_data.numpy(), train_labels.numpy()
     x_test, y_test = test_data.numpy(), test_labels.numpy()
     
     return x_train, y_train, x_test, y_test
     
-def load_fashion_mnist():
-    transform = transforms.Compose([transforms.ToTensor()])
+def load_fashion_mnist(normalize=False):
+    # Set up transforms, must be converted to tensor, normalize if specified
+    transform_list = [transforms.ToTensor()]
+    if normalize:
+        transform_list.append(torchvision.transforms.Normalize(mean=0.2860402, std=0.3530239))
+    transform = transforms.Compose(transform_list)
     
+    # Load dataset and apply transforms
     train_dataset = torchvision.datasets.FashionMNIST("data", download=True, train=True, transform=transform)
     test_dataset = torchvision.datasets.FashionMNIST("data", download=True, train=False, transform=transform)
     train_loader = DataLoader(train_dataset, batch_size=len(train_dataset))
     test_loader = DataLoader(test_dataset, batch_size=len(test_dataset))
     
+    # Convert dataset to numpy array
     (train_data, train_labels), (test_data, test_labels) = next(iter(train_loader)), next(iter(test_loader))
     x_train, y_train = train_data.numpy(), train_labels.numpy()
     x_test, y_test = test_data.numpy(), test_labels.numpy()
     
     return x_train, y_train, x_test, y_test
 
-def load_cifar10():
-    transform = transforms.Compose([transforms.ToTensor()])
+def load_cifar10(normalize=False, grayscale=False):
+    # Set up transforms, must be converted to tensor, normalize and/or grayscale if specified
+    transform_list = [transforms.ToTensor()]
+    if grayscale:
+        transform_list.append(transforms.Grayscale(num_output_channels=1))
+        if normalize:
+            transform_list.append(torchvision.transforms.Normalize(mean=0.48081008, std=0.23916137))
+    else:
+        if normalize:
+            transform_list.append(torchvision.transforms.Normalize(mean=[0.4914, 0.4822, 0.4465],
+                                                                   std=[0.2471, 0.2435, 0.2616]))
+    transform = transforms.Compose(transform_list)
     
+    # Load dataset and apply transforms
     train_dataset = torchvision.datasets.CIFAR10("data", download=True, train=True, transform=transform)
     test_dataset = torchvision.datasets.CIFAR10("data", download=True, train=False, transform=transform)
     train_loader = DataLoader(train_dataset, batch_size=len(train_dataset))
     test_loader = DataLoader(test_dataset, batch_size=len(test_dataset))
     
+    # Convert dataset to numpy array
     (train_data, train_labels), (test_data, test_labels) = next(iter(train_loader)), next(iter(test_loader))
     x_train, y_train = train_data.numpy(), train_labels.numpy()
     x_test, y_test = test_data.numpy(), test_labels.numpy()
     
     return x_train, y_train, x_test, y_test
-
-def RGB_to_gray(image):
-    if image.ndim == 4:
-        gray_images = 0.2989 * image[:,0,:,:] + 0.5870 * image[:,0,:,:] + 0.1140 * image[:,0,:,:]
-        return np.expand_dims(gray_images, 1)
-    else:
-        return 0.2989 * image[0,:,:] + 0.5870 * image[0,:,:] + 0.1140 * image[0,:,:]
 
 def train_model(model, x_train, x_test, y_train, y_test, epochs=15):
     """ Trains a model on the training data provided, and then evaluates it on the test data.
@@ -74,7 +92,6 @@ def train_model(model, x_train, x_test, y_train, y_test, epochs=15):
         itself and the model's output for that image.
     """
     device = "cuda" if torch.cuda.is_available() else "cpu"
-    #transform = transforms.Compose([transforms.Normalize((0,), (1,)),])
     
     trainset = torch.utils.data.TensorDataset(torch.Tensor(x_train), torch.Tensor(y_train).type(torch.long))
     valset = torch.utils.data.TensorDataset(torch.Tensor(x_test), torch.Tensor(y_test).type(torch.long))
@@ -231,7 +248,9 @@ def add_adversarial_noise(model, dataloader, eps=3e-2):
     
     for x, y in dataloader:
         x, y = x.to(device), y.to(device)
-        adv_images.append(fast_gradient_method(model, x, eps, np.inf).detach().cpu().numpy())
+        adv_images.append(projected_gradient_descent(model, x, eps, 0.01, 5, np.inf).detach().cpu().numpy())
+                                                     #clip_min=x.min().item(), clip_max=x.max().item()).detach().cpu().numpy())
+        #adv_images.append(fast_gradient_method(model, x, eps, np.inf).detach().cpu().numpy())
             
     adv_images = np.concatenate(adv_images)
     if device == "cuda":

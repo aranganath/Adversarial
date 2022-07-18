@@ -1,6 +1,7 @@
 import numpy as np
 from sklearn.svm import SVC
 from scipy import fftpack
+from time import time
 
 import utils
 
@@ -12,21 +13,25 @@ class ClusterAdversarialClassifier():
         
     def fit(self, X, y):
         # Find RBF classification boundary in input space
-        X_flat = X.reshape(X.shape[0], -1)
+        time0 = time()
         if self.input_transform:
             self.input_cluster = SVC(kernel='rbf', C=self.SVC_C, random_state=42, max_iter = 1e5, decision_function_shape='ovr').fit(
-                                     self.input_transform.fit_transform(X_flat), y)
+                                     self.input_transform.fit_transform(X), y)
         else:
+            X_flat = X.reshape(X.shape[0], -1)
             self.input_cluster = SVC(kernel='rbf', C=self.SVC_C, random_state=42, max_iter = 1e5, decision_function_shape='ovr').fit(
                                      X_flat, y)
+        self.input_cluster_train_time = time() - time0
 
         # Get model outputs
         train_dataloader = utils.create_dataloader(X, y)
         outputs = utils.get_network_outputs(self.model, train_dataloader)
         
+        time0 = time()
         # Find RBF classification boundary in output space
         self.output_cluster = SVC(kernel='rbf', C=self.SVC_C, random_state=42, max_iter = 1e5, decision_function_shape='ovr').fit(
                                   outputs, y)
+        self.output_cluster_train_time = time() - time0
         
     def predict(self, X):
         # Get model outputs on test data

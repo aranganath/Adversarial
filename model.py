@@ -56,7 +56,3 @@ class My_VGG(nn.Module):
                 torch.nn.init.constant_(m.weight, 1)
                 if m.bias is not None:
                     torch.nn.init.constant_(m.bias, 0)
-            elif isinstance(m, torch.nn.ConvTranspose2d):
-                torch.nn.init.normal_(m.weight, 0.0, 0.02)
-                if m.bias is not None:
-                    torch.nn.init.constant_(m.bias, 0)
